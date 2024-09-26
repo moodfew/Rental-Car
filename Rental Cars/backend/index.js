@@ -7,16 +7,19 @@ import passport from "passport";
 import { Strategy as LocalStrategy } from "passport-local";
 import bcrypt from "bcrypt";
 import flash from "connect-flash";
+import dotenv from "dotenv";
 
 const app = express();
 const port = 3000;
+
+dotenv.config();
 
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(
   session({
-    secret: "reverend-insanity",
+    secret: process.env.SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
   })
@@ -40,14 +43,28 @@ passport.deserializeUser(async (id, done) => {
 });
 
 const db = new pg.Client({
-  user: "postgres",
+  user: process.env.DB_USER,
   host: "localhost",
-  database: "Rental Cars",
-  password: "post123gres",
+  database: process.env.DB_DATABASE,
+  password: process.env.DB_PASSWORD,
   port: 5432,
 });
 
 db.connect();
+
+const isVendor = (req, res, next) => {
+  if (req.isAuthenticated() && req.user.role === "vendor") {
+    return next();
+  }
+  res.status(403).json({ message: "Forbidden: Not a vendor" });
+};
+
+const isAuthenticated = (req, res, next) => {
+  if (req.isAuthenticated()) {
+    return next();
+  }
+  res.status(403).json({ message: "Forbidden: Not authenticated" });
+};
 
 app.get("/", (req, res) => {
   if (req.isAuthenticated()) {
@@ -109,6 +126,21 @@ app.post(
     failureFlash: true,
   })
 );
+
+app.post("/vendor/addCar", isAuthenticated, isVendor, async (req, res) => {
+  const { make, model, year, price_per_day, transmission, seats, available } =
+    req.body;
+  try {
+    const newCar = await db.query(
+      "INSERT INTO cars (make, model, year, price_per_day, transmission, seats, available) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *",
+      [make, model, year, price_per_day, transmission, seats, available]
+    );
+    res.json(newCar.rows[0]);
+  } catch (err) {
+    console.error("Database error", err);
+    res.status(500).json({ message: "Error adding car" });
+  }
+});
 
 app.get("/user/logout", (req, res) => {
   req.logout((err) => {
