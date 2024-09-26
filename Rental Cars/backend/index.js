@@ -142,6 +142,25 @@ app.post("/vendor/addCar", isAuthenticated, isVendor, async (req, res) => {
   }
 });
 
+app.post("/rentals", isAuthenticated, async (req, res) => {
+  const { car_id, pickup_date, return_date } = req.body;
+
+  if (!car_id || !pickup_date || !return_date) {
+    return res.status(400).json({ message: "All fields are required" });
+  }
+
+  try {
+    const newRental = await db.query(
+      "INSERT INTO rentals (user_id, car_id, pickup_date, return_date) VALUES ($1, $2, $3, $4) RETURNING *",
+      [req.user.id, car_id, pickup_date, return_date]
+    );
+    res.json(newRental.rows[0]);
+  } catch (err) {
+    console.error("Database Error", err);
+    res.status(500).json({ message: "Error creating rental" });
+  }
+});
+
 app.get("/user/logout", (req, res) => {
   req.logout((err) => {
     if (err) {
