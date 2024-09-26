@@ -110,6 +110,15 @@ app.post(
   })
 );
 
+app.get("/user/logout", (req, res) => {
+  req.logout((err) => {
+    if (err) {
+      return next(err);
+    }
+    res.redirect("/user/login");
+  });
+});
+
 passport.use(
   new LocalStrategy(
     { usernameField: "email" },
