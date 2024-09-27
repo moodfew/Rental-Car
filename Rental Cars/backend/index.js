@@ -8,6 +8,7 @@ import { Strategy as LocalStrategy } from "passport-local";
 import bcrypt from "bcrypt";
 import flash from "connect-flash";
 import dotenv from "dotenv";
+import rateLimit from "express-rate-limit";
 
 const app = express();
 const port = 3000;
@@ -22,6 +23,11 @@ app.use(
     secret: process.env.SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
+    cookie: {
+      secure: process.env.NODE_ENV === "production",
+      httpOnly: true,
+      sameSite: "strict",
+    },
   })
 );
 app.use(flash());
@@ -50,6 +56,12 @@ const db = new pg.Client({
   port: 5432,
 });
 
+try {
+  db.connect();
+  console.log("Database connected successfully.");
+} catch (err) {
+  console.error("Database connection error", err);
+}
 db.connect();
 
 const isVendor = (req, res, next) => {
@@ -65,6 +77,12 @@ const isAuthenticated = (req, res, next) => {
   }
   res.status(403).json({ message: "Forbidden: Not authenticated" });
 };
+
+const loginLimiter = rateLimit({
+  windowMs: 2 * 60 * 1000,
+  limit: 5,
+  message: "Too many login attempts. Please try again after 2 minutes",
+});
 
 app.get("/", (req, res) => {
   if (req.isAuthenticated()) {
@@ -116,10 +134,7 @@ app.post(
 
 app.post(
   "/user/login",
-  (req, res, next) => {
-    console.log(req.body);
-    next();
-  },
+  loginLimiter,
   passport.authenticate("local", {
     successRedirect: "/",
     failureRedirect: "/user/login",
