@@ -62,7 +62,6 @@ try {
 } catch (err) {
   console.error("Database connection error", err);
 }
-db.connect();
 
 const isVendor = (req, res, next) => {
   if (req.isAuthenticated() && req.user.role === "vendor") {
