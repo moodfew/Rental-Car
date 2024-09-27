@@ -77,6 +77,13 @@ const isAuthenticated = (req, res, next) => {
   res.status(403).json({ message: "Forbidden: Not authenticated" });
 };
 
+const isAdmin = (req, res, next) => {
+  if (req.isAuthenticated() && req.user.role === "admin") {
+    return next();
+  }
+  res.status(403).json({ message: "Forbidden: Not an admin" });
+};
+
 const loginLimiter = rateLimit({
   windowMs: 2 * 60 * 1000,
   limit: 5,
@@ -155,6 +162,42 @@ app.post("/vendor/addCar", isAuthenticated, isVendor, async (req, res) => {
     res.status(500).json({ message: "Error adding car" });
   }
 });
+
+app.post("/vendor/carInfo/:id", isAuthenticated, isVendor, async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const car = await db.query("SELECT * FROM cars WHERE id = $1", [id]);
+    res.json(car.rows[0]);
+  } catch (err) {
+    console.error("Database error", err);
+    res.status(500).json({ message: "Error retrieving car information" });
+  }
+});
+
+app.post(
+  "/vendor/updateCar/:id",
+  isAuthenticated,
+  isVendor,
+  async (req, res) => {
+    const { id } = req.params;
+    const { make, model, year, price_per_day, transmission, seats, available } =
+      req.body;
+
+    try {
+      await db.query("BEGIN");
+      const updatedCar = await db.query(
+        "UPDATE cars SET make = $1, model = $2, year = $3, price_per_day = $4, transmission = $5, seats = $6, available = $6",
+        [make, model, year, price_per_day, transmission, seats, available]
+      );
+      res.json(updatedCar.rows[0]);
+    } catch (err) {
+      await db.query("ROLLBACK");
+      console.error("Database error", err);
+      res.status(500).json({ message: "Error updating car" });
+    }
+  }
+);
 
 app.post("/rentals", isAuthenticated, async (req, res) => {
   const { car_id, pickup_date, return_date } = req.body;
