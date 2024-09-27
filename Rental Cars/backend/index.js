@@ -16,8 +16,11 @@ const port = 3000;
 dotenv.config();
 
 app.use(cors());
+// Information parsing
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Session
 app.use(
   session({
     secret: process.env.SESSION_SECRET,
@@ -85,7 +88,7 @@ const isAdmin = (req, res, next) => {
 };
 
 const loginLimiter = rateLimit({
-  windowMs: 2 * 60 * 1000,
+  windowMs: 15 * 60 * 1000,
   limit: 5,
   message: "Too many login attempts. Please try again after 2 minutes",
 });
@@ -148,13 +151,17 @@ app.post(
   })
 );
 
+// Vendor routes
+
 app.post("/vendor/addCar", isAuthenticated, isVendor, async (req, res) => {
+  const id = req.user.id;
   const { make, model, year, price_per_day, transmission, seats, available } =
     req.body;
+
   try {
     const newCar = await db.query(
-      "INSERT INTO cars (make, model, year, price_per_day, transmission, seats, available) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *",
-      [make, model, year, price_per_day, transmission, seats, available]
+      "INSERT INTO cars (make, model, year, price_per_day, transmission, seats, available, owner_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *",
+      [make, model, year, price_per_day, transmission, seats, available, id]
     );
     res.json(newCar.rows[0]);
   } catch (err) {
@@ -168,10 +175,25 @@ app.post("/vendor/carInfo/:id", isAuthenticated, isVendor, async (req, res) => {
 
   try {
     const car = await db.query("SELECT * FROM cars WHERE id = $1", [id]);
+    console.log(car.rows[0]);
     res.json(car.rows[0]);
   } catch (err) {
     console.error("Database error", err);
     res.status(500).json({ message: "Error retrieving car information" });
+  }
+});
+
+app.post("/vendor/allCars", isAuthenticated, isVendor, async (req, res) => {
+  const id = req.user.id;
+
+  try {
+    const allCars = await db.query("SELECT * FROM cars WHERE owner_id = $1", [
+      id,
+    ]);
+    res.json(allCars.rows);
+  } catch (err) {
+    console.log("Database error", err);
+    res.status(500).json({ message: "Error getting vendor cars" });
   }
 });
 
@@ -187,8 +209,18 @@ app.post(
     try {
       await db.query("BEGIN");
       const updatedCar = await db.query(
-        "UPDATE cars SET make = $1, model = $2, year = $3, price_per_day = $4, transmission = $5, seats = $6, available = $6",
-        [make, model, year, price_per_day, transmission, seats, available]
+        "UPDATE cars SET make = $1, model = $2, year = $3, price_per_day = $4, transmission = $5, seats = $6, available = $6 ownder_id = $7 WHERE id = $8",
+        [
+          make,
+          model,
+          year,
+          price_per_day,
+          transmission,
+          seats,
+          available,
+          req.user.id,
+          id,
+        ]
       );
       res.json(updatedCar.rows[0]);
     } catch (err) {
@@ -198,6 +230,8 @@ app.post(
     }
   }
 );
+
+// User routes
 
 app.post("/rentals", isAuthenticated, async (req, res) => {
   const { car_id, pickup_date, return_date } = req.body;
