@@ -66,18 +66,26 @@ try {
   console.error("Database connection error", err);
 }
 
-const isVendor = (req, res, next) => {
-  if (req.isAuthenticated() && req.user.role === "vendor") {
-    return next();
-  }
-  res.status(403).json({ message: "Forbidden: Not a vendor" });
-};
-
+// Users //
 const isAuthenticated = (req, res, next) => {
   if (req.isAuthenticated()) {
     return next();
   }
   res.status(403).json({ message: "Forbidden: Not authenticated" });
+};
+
+const isUser = (req, res, next) => {
+  if (req.isAuthenticated() || req.user.role === "user") {
+    return next();
+  }
+  res.status(403).json({ message: "Forbidden: Not a user" });
+};
+
+const isVendor = (req, res, next) => {
+  if (req.isAuthenticated() && req.user.role === "vendor") {
+    return next();
+  }
+  res.status(403).json({ message: "Forbidden: Not a vendor" });
 };
 
 const isAdmin = (req, res, next) => {
@@ -100,11 +108,9 @@ app.get("/", (req, res) => {
     res.json({ message: "User is now logged in" });
   }
 });
+//////////
 
-app.get("/user/login", (req, res) => {
-  res.json({ message: "Login page. Please enter your credentials." });
-});
-
+// Authentication. Register and Login //
 app.post(
   "/user/register",
   [
@@ -151,7 +157,12 @@ app.post(
   })
 );
 
-// Vendor routes
+app.get("/user/login", (req, res) => {
+  res.json({ message: "Login page. Please enter your credentials." });
+});
+//////////////////
+
+// Vendor routes//
 
 app.post("/vendor/addCar", isAuthenticated, isVendor, async (req, res) => {
   const id = req.user.id;
@@ -183,7 +194,7 @@ app.post("/vendor/carInfo/:id", isAuthenticated, isVendor, async (req, res) => {
   }
 });
 
-app.post("/vendor/allCars", isAuthenticated, isVendor, async (req, res) => {
+app.get("/vendor/allCars", isAuthenticated, isVendor, async (req, res) => {
   const id = req.user.id;
 
   try {
@@ -230,10 +241,10 @@ app.post(
     }
   }
 );
+///////////////
 
-// User routes
-
-app.post("/rentals", isAuthenticated, async (req, res) => {
+// User routes //
+app.post("/newRental", isAuthenticated, isUser, async (req, res) => {
   const { car_id, pickup_date, return_date } = req.body;
 
   if (!car_id || !pickup_date || !return_date) {
@@ -252,6 +263,18 @@ app.post("/rentals", isAuthenticated, async (req, res) => {
   }
 });
 
+app.get("/rentals", isAuthenticated, isUser, async (req, res) => {
+  try {
+    const rentals = await db.query("SELECT * FROM rentals WHERE user_id = $1", [
+      req.user.id,
+    ]);
+    res.json(rentals.rows);
+  } catch (err) {
+    console.error("Database Error", err);
+    res.status(500).json({ message: "Error getting rentals" });
+  }
+});
+
 app.get("/user/logout", (req, res) => {
   req.logout((err) => {
     if (err) {
@@ -259,6 +282,34 @@ app.get("/user/logout", (req, res) => {
     }
     res.redirect("/user/login");
   });
+});
+///////////////
+
+// Admin
+app.get("/admin/users", isAuthenticated, isAdmin, async (req, res) => {
+  try {
+    const users = await db.query("SELECT * FROM users;");
+    res.json(users.rows);
+  } catch (err) {
+    console.error("Database error:", err);
+    res.status(500).json({ message: "Error retrieving users" });
+  }
+});
+
+app.get("/admin/rentals", isAuthenticated, isAdmin, async (req, res) => {
+  try {
+    const rentals = await db.query(
+      `SELECT rentals.*, users.name AS renter_name, cars.make, cars.model
+      FROM rentals
+      JOIN users ON rentals.user_id = users.id
+      JOIN cars ON rentals.car_id = cars.id
+      `
+    );
+    res.json(rentals.rows);
+  } catch (err) {
+    console.error("Database Error:", err);
+    res.status(500).json({ message: "Error retrieving rentals" });
+  }
 });
 
 passport.use(
