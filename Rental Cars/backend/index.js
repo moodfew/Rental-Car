@@ -312,6 +312,22 @@ app.get("/admin/rentals", isAuthenticated, isAdmin, async (req, res) => {
   }
 });
 
+app.put("/admin/rental/:id", isAuthenticated, isAdmin, async (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body;
+
+  try {
+    const updatedRental = await db.query(
+      "UPDATE rentals SET status = $1 WHERE id = $2 RETURNING *",
+      [status, id]
+    );
+    res.json(updatedRental.rows[0]);
+  } catch (err) {
+    console.error("Database Error:", err);
+    res.status(500).json({ message: "Error updating rental status" });
+  }
+});
+
 passport.use(
   new LocalStrategy(
     { usernameField: "email" },
